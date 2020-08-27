@@ -9305,8 +9305,8 @@ function write_cellXfs(cellXfs) {
 	var o = [];
 	o[o.length] = (writextag('cellXfs',null));
 	cellXfs.forEach(function(c) {
-		o[o.length] = (writextag('xf', null, c));
-	});
+			o[o.length] = (writextag('xf', c.applyAlignment == 1 ? '<alignment horizontal="right"/>' : null, c));
+		});
 	o[o.length] = ("</cellXfs>");
 	if(o.length === 2) return "";
 	o[0] = writextag('cellXfs',null, {count:o.length-2}).replace("/>",">");
@@ -9365,7 +9365,9 @@ RELS.STY = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/
 function write_sty_xml(wb, opts) {
 	var o = [XML_HEADER, STYLES_XML_ROOT], w;
 	if(wb.SSF && (w = write_numFmts(wb.SSF)) != null) o[o.length] = w;
-	o[o.length] = ('<fonts count="1"><font><sz val="12"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>');
+	
+	o[o.length] = ('<fonts count="2"><font><sz val="12"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font><font><b/><sz val="12"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>');
+
 	o[o.length] = ('<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>');
 	o[o.length] = ('<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>');
 	o[o.length] = ('<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>');
@@ -13129,27 +13131,18 @@ function default_margins(margins, mode) {
 }
 
 function get_cell_style(styles, cell, opts) {
-	var z = opts.revssf[cell.z != null ? cell.z : "General"];
-	var i = 0x3c, len = styles.length;
-	if(z == null && opts.ssf) {
-		for(; i < 0x188; ++i) if(opts.ssf[i] == null) {
-			SSF.load(cell.z, i);
-			// $FlowIgnore
-			opts.ssf[i] = cell.z;
-			opts.revssf[cell.z] = z = i;
-			break;
-		}
-	}
-	for(i = 0; i != len; ++i) if(styles[i].numFmtId === z) return i;
-	styles[len] = {
-		numFmtId:z,
-		fontId:0,
-		fillId:0,
-		borderId:0,
-		xfId:0,
-		applyNumberFormat:1
-	};
-	return len;
+	    var z = opts.revssf[cell.z||"General"];
+	    for(var i = 0; i != styles.length; ++i) if(styles[i].numFmtId === z && (styles[i].fontId === 1 ? cell.bold : !cell.bold) && (styles[i].applyAlignment === 1 ? cell.alignRight : !cell.alignRight)) return i;
+	    styles[styles.length] = {
+	        numFmtId: z,
+	        fontId: cell.bold ? 1 : 0,
+	        fillId: 0,
+	        borderId: 0,
+	        xfId: 0,
+	        applyNumberFormat: 1,
+	        applyAlignment: cell.alignRight ? 1 : 0
+	    };
+	   return styles.length-1;
 }
 
 function safe_format(p, fmtid, fillid, opts, themes, styles) {
@@ -13441,7 +13434,7 @@ function write_ws_xml_sheetviews(ws, opts, idx, wb) {
 }
 
 function write_ws_xml_cell(cell, ref, ws, opts) {
-	if(cell.v === undefined && cell.f === undefined || cell.t === 'z') return "";
+	if(cell.v === undefined && ! cell.f) return "";
 	var vv = "";
 	var oldt = cell.t, oldv = cell.v;
 	if(cell.t !== "z") switch(cell.t) {
@@ -13459,7 +13452,12 @@ function write_ws_xml_cell(cell, ref, ws, opts) {
 			break;
 		default: vv = cell.v; break;
 	}
-	var v = writetag('v', escapexml(vv)), o = ({r:ref});
+	// var v = writetag('v', escapexml(vv)), o = ({r:ref});
+	var o = { r: ref },
+			v = cell.f ?
+				writetag('f', escapexml(cell.f)) :
+				writetag('v', escapexml(vv));
+
 	/* TODO: cell style */
 	var os = get_cell_style(opts.cellXfs, cell, opts);
 	if(os !== 0) o.s = os;
